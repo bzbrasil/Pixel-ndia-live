@@ -1,0 +1,9 @@
+{
+  "name": "pixelandia-live",
+  "version": "1.0.0",
+  "description": "Servidor da live da Pixelândia: lê a live do TikTok e conecta na vila",
+  "main": "server.js",
+  "scripts": { "start": "node server.js", "teste": "MOCK=1 node server.js" },
+  "engines": { "node": ">=18" },
+  "dependencies": { "tiktok-live-connector": "latest" }
+}
