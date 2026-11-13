@@ -54,6 +54,8 @@ body.rec #panel{display:none}
 body.rec #view{cursor:none}
 body.rec,body.rec #app,body.rec #stage{background:#000;height:100vh;overflow:hidden}
 body.rec #view{width:100vw;height:100vh;aspect-ratio:auto;object-fit:cover}
+body.livemode #view{object-fit:fill}
+body.livemode,body.livemode #app,body.livemode #stage{margin:0;padding:0;overflow:hidden}
 @media (max-width:860px){
  #app{flex-direction:column;height:auto}
  #stage{padding:0}
@@ -1780,7 +1782,7 @@ function jobTick(){
   if(r.babyNaming>0) r.babyNaming--;if(r.pendingJob>0){r.pendingJob--;if(r.pendingJob<=0){const j=pick(RANDOM_JOBS);assignJob(r,j,findRole(j),'sorteio')}}}
 }
 let PADX=0;
-function calcPad(){PADX=0;if(!document.body.classList.contains('rec')) return;const r=innerHeight/Math.max(1,innerWidth);if(r>VH/VW){const visW=VH/r;PADX=Math.max(0,(VW-visW)/2)}}
+function calcPad(){PADX=0;if(!document.body.classList.contains('rec')||LIVE_MODE) return;const r=innerHeight/Math.max(1,innerWidth);if(r>VH/VW){const visW=VH/r;PADX=Math.max(0,(VW-visW)/2)}}
 function drawStatus(){
  if(!state.showStatus) return;
  const c=vctx,x=24+PADX,y0=548,w=372,rowH=42,cp=caps_();
@@ -2270,7 +2272,7 @@ syncUI();updPanel();
 if(document.fonts&&document.fonts.load){document.fonts.load('20px "Press Start 2P"');document.fonts.load('20px VT323')}
 window.vila={onComment,onRose,onGift,trigger,handleLive,state};
 if(state.soundOn){try{auStart();setTimeout(()=>{if(AU.ctx&&AU.ctx.state!=='running') AU.on=false;syncSoundBtn()},500)}catch(e){}}
-if(LIVE_MODE){setRec(true);$('recHint').style.display='none';try{auStart();state.soundOn=true}catch(e){}}
+if(LIVE_MODE){document.body.classList.add('livemode');setRec(true);$('recHint').style.display='none';try{auStart();state.soundOn=true}catch(e){}}
 serverSync();
 if(window.VILA_SERVER){
  $('inWs').value=(location.protocol==='https:'?'wss://':'ws://')+location.host+'/ws';
