@@ -2129,7 +2129,16 @@ function connectLive(){
  ws.onopen=()=>{liveMsg(window.VILA_SERVER?'✔ Ligado ao servidor':'✔ Conectado ao TikFinity');const u=$('inTTUser').value.trim().replace(/^@/,'');if(window.VILA_SERVER&&u&&u!==(window.VILA_SERVER.user||'')){try{ws.send(JSON.stringify({type:'connect',username:u}))}catch(e){}}};
  ws.onerror=()=>liveMsg('Não conectou. O TikFinity está aberto? Este arquivo precisa estar aberto no navegador do PC ou no OBS.');
  ws.onclose=()=>{if(wantLive){liveMsg('Conexão caiu, tentando de novo…');setTimeout(()=>{if(wantLive) connectLive()},4000)}else liveMsg('Desconectado')};
- ws.onmessage=m=>{let d;try{d=JSON.parse(m.data)}catch(e){return}handleLive(d.event,d.data||{})};
+ ws.onmessage=m=>{let d;try{d=JSON.parse(m.data)}catch(e){return}if(tfOn&&window.VILA_SERVER&&d.event!=='status') return;if(tfOn&&d.event==='status') return;handleLive(d.event,d.data||{})};
+}
+/* TikFinity local (PC): ws://localhost:21213 — usado na live quando o servidor não consegue ler o TikTok */
+let tfWs=null,tfOn=false;
+function connectTikFinity(){
+ try{tfWs=new WebSocket('ws://localhost:21213/')}catch(e){setTimeout(connectTikFinity,8000);return}
+ tfWs.onopen=()=>{tfOn=true;handleLive('status',{msg:'Conectado via TikFinity'})};
+ tfWs.onmessage=m=>{let d;try{d=JSON.parse(m.data)}catch(e){return}if(d&&d.event&&d.event!=='status') handleLive(d.event,d.data||{})};
+ tfWs.onclose=()=>{if(tfOn){tfOn=false;handleLive('status',{msg:'TikFinity desconectado'})}setTimeout(connectTikFinity,5000)};
+ tfWs.onerror=()=>{};
 }
 function handleLive(evName,d){
  if(evName==='status'){const was=liveOn;liveOn=/Conectado|MODO TESTE/.test(d.msg||'');if(liveOn!==was) diary(liveOn?'🔴 LIVE CONECTADA · moradores: '+popCount:'⚪ live desconectada · moradores: '+popCount);liveMsg((window.VILA_SERVER?'Servidor: ':'')+d.msg);return}
@@ -2283,6 +2292,7 @@ if(window.VILA_SERVER){
  $('srvBox').style.display='block';$('inTTUser').value=window.VILA_SERVER.user||'';
  setTimeout(connectLive,600);
 }
+if(LIVE_MODE) setTimeout(connectTikFinity,1000);
 let lastTap=0;
 view.addEventListener('touchend',()=>{const n=Date.now();if(n-lastTap<350&&document.body.classList.contains('rec')) setRec(false);lastTap=n});
 requestAnimationFrame(frame);
