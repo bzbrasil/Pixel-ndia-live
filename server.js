@@ -134,8 +134,25 @@ function startMock() {
 }
 
 /* ---------------- HTTP ---------------- */
+const STATE_FILE = path.join(require('os').tmpdir(), 'pixelandia-state.json');
+let villageState = null;
+try { villageState = fs.readFileSync(STATE_FILE, 'utf8'); } catch (e) {}
 const server = http.createServer((req, res) => {
   const url = req.url.split('?')[0];
+  if (url === '/state') {
+    if (req.method === 'POST') {
+      let body = '';
+      req.on('data', c => { body += c; if (body.length > 3e6) req.destroy(); });
+      req.on('end', () => {
+        try { const d = JSON.parse(body); if (!d || !Array.isArray(d.r)) throw 0; villageState = body; fs.writeFile(STATE_FILE, body, () => {}); res.writeHead(200, { 'Content-Type': 'application/json' }); res.end('{"ok":true}'); }
+        catch (e) { res.writeHead(400); res.end('{"ok":false}'); }
+      });
+      return;
+    }
+    res.writeHead(villageState ? 200 : 404, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+    res.end(villageState || 'null');
+    return;
+  }
   if (url === '/health') { res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' }); res.end('ok · ' + lastStatus); return; }
   if (url === '/' || url === '/index.html') {
     fs.readFile(PAGE, 'utf8', (err, html) => {
@@ -143,6 +160,14 @@ const server = http.createServer((req, res) => {
       html = html.replace('<head>', '<head><script>window.VILA_SERVER=' + JSON.stringify({ user: USERNAME }) + ';</script>');
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-cache' });
       res.end(html);
+    });
+    return;
+  }
+  const STATIC = { '/manifest.json': 'application/manifest+json', '/icon-192.png': 'image/png', '/icon-512.png': 'image/png', '/icon-maskable-512.png': 'image/png', '/favicon.ico': 'image/png' };
+  if (STATIC[url]) {
+    fs.readFile(path.join(__dirname, url === '/favicon.ico' ? 'icon-192.png' : url.slice(1)), (err, buf) => {
+      if (err) { res.writeHead(404); res.end(); return; }
+      res.writeHead(200, { 'Content-Type': STATIC[url], 'Cache-Control': 'public, max-age=3600' }); res.end(buf);
     });
     return;
   }
