@@ -1706,7 +1706,7 @@ function update(dt){
   sinceEv+=dt;
   if(TUT){}
   else if(evQueue.length&&sinceEv>2){const [a,b]=evQueue.shift();trigger(a,b)}
-  else if(state.autoEvents&&sinceEv>18){evAcc+=dt;if(evAcc>=1){evAcc=0;if(Math.random()<state.chance/100/60) autoEvent()}}
+  else if(state.autoEvents&&sinceEv>18&&simActive()){evAcc+=dt;if(evAcc>=1){evAcc=0;if(Math.random()<state.chance/100/60) autoEvent()}}
  }
  updParticles(dt);updCam(dt);audioTick(dt);
  dispPop+=(popCount-dispPop)*Math.min(1,dt*4);if(Math.abs(dispPop-popCount)<0.5) dispPop=popCount;
@@ -1756,16 +1756,16 @@ function econTick(){
  // fome
  if(state.food<=0){
   if(!econFlags.noFood){econFlags.noFood=true;say('A COMIDA *ACABOU*',2.4);toast('🌹 Mandem rosa e virem FAZENDEIRO ou CAÇADOR!')}
-  for(const h of humans) if(!h.dead&&h.status!=='zombie'&&Math.random()<0.004) kill(h,'morreu de fome');
+  if(simActive()) for(const h of humans) if(!h.dead&&h.status!=='zombie'&&Math.random()<0.0012) kill(h,'morreu de fome');
  } else if(state.food<cp.food*0.15){
   if(!econFlags.lowFood){econFlags.lowFood=true;say('A COMIDA ESTÁ *ACABANDO*',2.4);toast('🍖 A vila precisa de fazendeiros, caçadores e pescadores')}
  } else if(state.food>cp.food*0.4){econFlags.lowFood=false;econFlags.noFood=false}
  // frio
- if(neve&&state.wood<=0) for(const h of humans) if(!h.dead&&h.status!=='zombie'&&Math.random()<0.004) kill(h,'morreu de frio');
+ if(neve&&state.wood<=0) for(const h of humans) if(!h.dead&&h.status!=='zombie'&&Math.random()<0.002) kill(h,'morreu de frio');
  // tristeza: gente vai embora
  if(state.moral<15){
   if(!econFlags.lowMoral){econFlags.lowMoral=true;say('O POVO ESTÁ *TRISTE*',2.2)}
-  for(const h of humans) if(!h.dead&&h.status==='ok'&&Math.random()<0.0015){h.dead=true;needSweep=true;if(byKey.get(h.key)===h) byKey.delete(h.key);if(!h.extra) toastLimited(`🚶 ${h.name} abandonou a vila`)}
+  if(simActive()) for(const h of humans) if(!h.dead&&h.status==='ok'&&Math.random()<0.0008){h.dead=true;needSweep=true;if(byKey.get(h.key)===h) byKey.delete(h.key);if(!h.extra) toastLimited(`🚶 ${h.name} abandonou a vila`)}
  } else if(state.moral>30) econFlags.lowMoral=false;
 }
 const RANDOM_JOBS=['Fazendeiro','Caçador','Pescador','Coletor','Lenhador','Mineiro','Construtor','Médico','Guerreiro','Padre','Cozinheiro','Bardo','Ferreiro','Ratoeiro','Salva-vidas','Comerciante','Sábio','Bombeiro','Mago'];
@@ -2129,7 +2129,7 @@ function connectLive(){
  ws.onmessage=m=>{let d;try{d=JSON.parse(m.data)}catch(e){return}handleLive(d.event,d.data||{})};
 }
 function handleLive(evName,d){
- if(evName==='status'){liveMsg((window.VILA_SERVER?'Servidor: ':'')+d.msg);return}
+ if(evName==='status'){liveOn=/Conectado|MODO TESTE/.test(d.msg||'');liveMsg((window.VILA_SERVER?'Servidor: ':'')+d.msg);return}
  const name=d.nickname||d.uniqueId||'anônimo';
  if(evName==='chat') onComment(name,d.comment||'');
  else if(evName==='gift'){
@@ -2149,7 +2149,8 @@ function snapshot(){
  return{v:1,s:{town:state.town,episode:state.episode,epTitle:state.epTitle,progress:state.progress,era:state.era,day:state.day,deaths:state.deaths,monsters:state.monsters,roses:state.roses,autoEvents:state.autoEvents,chance:state.chance,autoCam:state.autoCam,dayNight:state.dayNight,giftsSummon:state.giftsSummon,chatJoin:state.chatJoin,roseVal:state.roseVal,food:state.food,wood:state.wood,stone:state.stone,health:state.health,moral:state.moral,roseJobs:state.roseJobs,showStatus:state.showStatus,babyMin:state.babyMin,blessMin:state.blessMin,summonMin:state.summonMin,soundOn:state.soundOn,musicVol:state.musicVol,sfxVol:state.sfxVol},
   r:residents.filter(r=>!r.dead&&r.status!=='zombie').map(r=>{const sp=r.spouse?residents.find(x=>x.id===r.spouse&&!x.dead):null;return[r.name,r.role,r.extra?1:0,r.crown,r.shield,r.isChild?1:0,sp?sp.name:'']})};
 }
-let lastServerSave=0,serverReady=false;
+let lastServerSave=0,serverReady=false,liveOn=false;
+function simActive(){return !window.VILA_SERVER||liveOn}
 function save(){if(TUT) return;const snap=snapshot();snap.ts=Date.now();try{localStorage.setItem(KEY,JSON.stringify(snap))}catch(e){}
  if(window.VILA_SERVER&&LIVE_MODE&&serverReady&&Date.now()-lastServerSave>10000){lastServerSave=Date.now();fetch('/state',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(snap)}).catch(()=>{})}}
 function pushToServer(){const snap=snapshot();snap.ts=Date.now();return fetch('/state',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(snap)}).then(r=>r.ok)}
