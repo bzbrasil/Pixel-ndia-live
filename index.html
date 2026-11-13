@@ -462,7 +462,7 @@ function kill(r,cause){
  state.deaths++; if(ev) ev.kills=(ev.kills||0)+1;sfx('die');
  progressAdd(-0.2,true);
  burst(r.x,r.y-2,'#d8d8e8',6);
- if(!r.extra) toastLimited(`☠ ${r.name} ${cause}`);
+ if(!r.extra){toastLimited(`☠ ${r.name} ${cause}`);diary(`☠ ${r.name} ${cause}`)}
  return true;
 }
 function infect(h){
@@ -725,8 +725,11 @@ function updParticles(dt){
 /* ================= TEXTO / LEGENDAS ================= */
 const LIVE_MODE=/[?&]live=1/.test(location.search)||location.hash==='#live';
 let TUT=null,fadeBlack=0;
-function say(text,dur=2.2,force){if(TUT&&!force) return;caps.push({text,dur,t:0})}
-function toast(text){if(TUT) return;toasts.push({text,t:0});if(toasts.length>5) toasts.shift()}
+let diaryBuf=[],diaryLast='';
+function diary(text){if(TUT||!LIVE_MODE||!window.VILA_SERVER) return;text=String(text).replace(/\*/g,'').trim();if(!text||text===diaryLast) return;diaryLast=text;diaryBuf.push({t:Date.now(),x:text});if(diaryBuf.length>500) diaryBuf.shift()}
+setInterval(()=>{if(!diaryBuf.length||!window.VILA_SERVER) return;const lines=diaryBuf.splice(0);fetch('/diario',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({lines})}).catch(()=>{diaryBuf=lines.concat(diaryBuf)})},8000);
+function say(text,dur=2.2,force){if(TUT&&!force) return;caps.push({text,dur,t:0});diary('📢 '+text)}
+function toast(text){if(TUT) return;toasts.push({text,t:0});if(toasts.length>5) toasts.shift();diary(text)}
 let toastBudget=0;
 function toastLimited(text){if(toastBudget<4){toastBudget++;toast(text)}}
 function shake(a){shakeAmt=Math.max(shakeAmt,a)}
@@ -1217,7 +1220,7 @@ function pollEvent(cfg){
     e.stage=1;e.t2=e.t;
     const cnt=e.poll.opts.map(()=>0);for(const v of e.votes.values()) cnt[v]++;
     const mx=Math.max(...cnt);const tops=cnt.map((c,i)=>c===mx?i:-1).filter(i=>i>=0);
-    e.win=pick(tops);e.counts=cnt;e.noVotes=mx===0;
+    e.win=pick(tops);e.counts=cnt;e.noVotes=mx===0;diary('🗳 '+(e.title||cfg.title)+': '+e.poll.opts.map((o,i)=>o.label+' '+cnt[i]).join(' x '));
     cfg.resolve(e,e.win);
    }
    if(e.stage===1&&cfg.tick) cfg.tick(e,dt);
@@ -2129,7 +2132,7 @@ function connectLive(){
  ws.onmessage=m=>{let d;try{d=JSON.parse(m.data)}catch(e){return}handleLive(d.event,d.data||{})};
 }
 function handleLive(evName,d){
- if(evName==='status'){liveOn=/Conectado|MODO TESTE/.test(d.msg||'');liveMsg((window.VILA_SERVER?'Servidor: ':'')+d.msg);return}
+ if(evName==='status'){const was=liveOn;liveOn=/Conectado|MODO TESTE/.test(d.msg||'');if(liveOn!==was) diary(liveOn?'🔴 LIVE CONECTADA · moradores: '+popCount:'⚪ live desconectada · moradores: '+popCount);liveMsg((window.VILA_SERVER?'Servidor: ':'')+d.msg);return}
  const name=d.nickname||d.uniqueId||'anônimo';
  if(evName==='chat') onComment(name,d.comment||'');
  else if(evName==='gift'){

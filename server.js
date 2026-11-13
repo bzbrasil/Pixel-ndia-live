@@ -136,9 +136,29 @@ function startMock() {
 /* ---------------- HTTP ---------------- */
 const STATE_FILE = path.join(require('os').tmpdir(), 'pixelandia-state.json');
 let villageState = null;
+const DIARY_FILE = path.join(require('os').tmpdir(), 'pixelandia-diario.json');
+let diaryLog = [];
+try { diaryLog = JSON.parse(fs.readFileSync(DIARY_FILE, 'utf8')) || []; } catch (e) {}
 try { villageState = fs.readFileSync(STATE_FILE, 'utf8'); } catch (e) {}
 const server = http.createServer((req, res) => {
   const url = req.url.split('?')[0];
+  if (url === '/diario' && req.method === 'POST') {
+    let body = '';
+    req.on('data', c => { body += c; if (body.length > 1e6) req.destroy(); });
+    req.on('end', () => {
+      try { const d = JSON.parse(body); for (const l of (d.lines || [])) if (l && l.x) diaryLog.push({ t: +l.t || Date.now(), x: String(l.x).slice(0, 300) }); if (diaryLog.length > 8000) diaryLog.splice(0, diaryLog.length - 8000); fs.writeFile(DIARY_FILE, JSON.stringify(diaryLog), () => {}); res.writeHead(200); res.end('ok'); }
+      catch (e) { res.writeHead(400); res.end('erro'); }
+    });
+    return;
+  }
+  if (url === '/diario') {
+    const fmt = new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    const txt = diaryLog.length ? diaryLog.map(l => fmt.format(new Date(l.t)) + '  ' + l.x).join('\n') : '(o diário está vazio: ele começa a anotar quando a vila de live (?live=1) está aberta)';
+    res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' });
+    res.end('DIÁRIO DA PIXELÂNDIA\n\n' + txt + '\n');
+    return;
+  }
+  if (url === '/diario/limpar' && req.method === 'POST') { diaryLog = []; fs.writeFile(DIARY_FILE, '[]', () => {}); res.writeHead(200); res.end('ok'); return; }
   if (url === '/state') {
     if (req.method === 'POST') {
       let body = '';
