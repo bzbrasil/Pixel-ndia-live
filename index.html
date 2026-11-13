@@ -245,6 +245,8 @@ body.rec #view{width:100vw;height:100vh;aspect-ratio:auto;object-fit:cover}
    <div class="row" style="margin-top:8px"><button id="btExport">Gerar backup</button><button id="btImport">Carregar backup</button></div>
    <textarea id="inBackup" placeholder="O backup aparece aqui. Para carregar, cole aqui e clique em Carregar backup." style="min-height:60px;margin-top:8px"></textarea>
    <div class="msg" id="saveMsg"></div>
+   <div class="row" style="margin-top:6px"><button id="btPush">⬆ Enviar esta vila pro servidor</button></div>
+   <div class="note">A vila do link de live (<code>?live=1</code>) carrega a vila salva no servidor. Use este botão depois de carregar um backup aqui.</div>
    <div class="row" style="margin-top:6px"><button class="bad" id="btReset">Nova vila (apaga tudo)</button></div>
   </div>
  </aside>
@@ -719,6 +721,7 @@ function updParticles(dt){
 }
 
 /* ================= TEXTO / LEGENDAS ================= */
+const LIVE_MODE=/[?&]live=1/.test(location.search)||location.hash==='#live';
 let TUT=null,fadeBlack=0;
 function say(text,dur=2.2,force){if(TUT&&!force) return;caps.push({text,dur,t:0})}
 function toast(text){if(TUT) return;toasts.push({text,t:0});if(toasts.length>5) toasts.shift()}
@@ -2144,7 +2147,20 @@ function snapshot(){
  return{v:1,s:{town:state.town,episode:state.episode,epTitle:state.epTitle,progress:state.progress,era:state.era,day:state.day,deaths:state.deaths,monsters:state.monsters,roses:state.roses,autoEvents:state.autoEvents,chance:state.chance,autoCam:state.autoCam,dayNight:state.dayNight,giftsSummon:state.giftsSummon,chatJoin:state.chatJoin,roseVal:state.roseVal,food:state.food,wood:state.wood,stone:state.stone,health:state.health,moral:state.moral,roseJobs:state.roseJobs,showStatus:state.showStatus,babyMin:state.babyMin,blessMin:state.blessMin,summonMin:state.summonMin,soundOn:state.soundOn,musicVol:state.musicVol,sfxVol:state.sfxVol},
   r:residents.filter(r=>!r.dead&&r.status!=='zombie').map(r=>{const sp=r.spouse?residents.find(x=>x.id===r.spouse&&!x.dead):null;return[r.name,r.role,r.extra?1:0,r.crown,r.shield,r.isChild?1:0,sp?sp.name:'']})};
 }
-function save(){if(TUT) return;try{localStorage.setItem(KEY,JSON.stringify(snapshot()))}catch(e){}}
+let lastServerSave=0,serverReady=false;
+function save(){if(TUT) return;const snap=snapshot();snap.ts=Date.now();try{localStorage.setItem(KEY,JSON.stringify(snap))}catch(e){}
+ if(window.VILA_SERVER&&LIVE_MODE&&serverReady&&Date.now()-lastServerSave>10000){lastServerSave=Date.now();fetch('/state',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(snap)}).catch(()=>{})}}
+function pushToServer(){const snap=snapshot();snap.ts=Date.now();return fetch('/state',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(snap)}).then(r=>r.ok)}
+async function serverSync(){
+ if(!window.VILA_SERVER) return;
+ try{
+  const r=await fetch('/state',{cache:'no-store'});const d=r.ok?await r.json():null;
+  let local=null;try{local=JSON.parse(localStorage.getItem(KEY))}catch(e){}
+  if(d&&d.r&&(LIVE_MODE||!local||(d.ts||0)>(local.ts||0))){restore(d);try{localStorage.setItem(KEY,JSON.stringify(d))}catch(e){};liveMsg&&$('saveMsg')&&($('saveMsg').textContent='Vila carregada do servidor ✔')}
+  else if(!LIVE_MODE&&local&&local.r&&(!d||(local.ts||0)>=(d.ts||0))){await pushToServer();$('saveMsg').textContent='Vila enviada pro servidor ✔'}
+ }catch(e){}
+ serverReady=true;
+}
 function restore(d){
  if(!d||!d.s) return false;
  Object.assign(state,d.s);
@@ -2230,11 +2246,12 @@ $('btDevolve').onclick=()=>{if(state.era>0){state.progress=ERAS[state.era-1].at;
 function goFull(on){try{const d=document,el=d.documentElement;
  if(on){if(!(d.fullscreenElement||d.webkitFullscreenElement)){const f=el.requestFullscreen||el.webkitRequestFullscreen;if(f){const pr=f.call(el,{navigationUI:'hide'});if(pr&&pr.catch) pr.catch(()=>{})}}try{screen.orientation&&screen.orientation.lock&&screen.orientation.lock('portrait').catch(()=>{})}catch(e){}}
  else if(d.fullscreenElement||d.webkitFullscreenElement){const x=d.exitFullscreen||d.webkitExitFullscreen;if(x){const pr=x.call(d);if(pr&&pr.catch) pr.catch(()=>{})}}}catch(e){}}
-function setRec(on){document.body.classList.toggle('rec',on);if(!TUT) goFull(on);const h=$('recHint');h.style.opacity=on?1:0;if(on) setTimeout(()=>h.style.opacity=0,2500)}
+function setRec(on){document.body.classList.toggle('rec',on);if(!TUT&&!LIVE_MODE) goFull(on);const h=$('recHint');h.style.opacity=on?1:0;if(on) setTimeout(()=>h.style.opacity=0,2500)}
 $('btRec').onclick=()=>setRec(true);
 document.addEventListener('keydown',e=>{if(e.target.tagName==='INPUT'||e.target.tagName==='TEXTAREA') return;if(e.key==='h'||e.key==='H') setRec(!document.body.classList.contains('rec'));if(e.key==='Escape') setRec(false)});
 $('btExport').onclick=()=>{const s=JSON.stringify(snapshot());$('inBackup').value=s;$('saveMsg').textContent='Backup gerado. Copie o texto acima.';try{navigator.clipboard.writeText(s).then(()=>$('saveMsg').textContent='Backup copiado ✔',()=>{})}catch(e){}};
-$('btImport').onclick=()=>{try{const d=JSON.parse($('inBackup').value);if(restore(d)){save();$('saveMsg').textContent='Vila carregada ✔'}else $('saveMsg').textContent='Backup inválido'}catch(e){$('saveMsg').textContent='Backup inválido'}};
+$('btImport').onclick=()=>{try{const d=JSON.parse($('inBackup').value);if(restore(d)){save();$('saveMsg').textContent='Vila carregada ✔';if(window.VILA_SERVER) pushToServer().then(ok=>{if(ok)$('saveMsg').textContent='Vila carregada e enviada pro servidor ✔'}).catch(()=>{})}else $('saveMsg').textContent='Backup inválido'}catch(e){$('saveMsg').textContent='Backup inválido'}};
+$('btPush').onclick=()=>{if(!window.VILA_SERVER){$('saveMsg').textContent='Só funciona pelo link do servidor (Render)';return}pushToServer().then(ok=>$('saveMsg').textContent=ok?'Vila enviada pro servidor ✔':'Não deu pra enviar').catch(()=>$('saveMsg').textContent='Não deu pra enviar')};
 let resetArm=0;
 $('btReset').onclick=e=>{const b=e.target;if(Date.now()-resetArm<3000){newVillage();b.textContent='Nova vila (apaga tudo)';$('saveMsg').textContent='Vila nova criada'}else{resetArm=Date.now();b.textContent='Clique de novo para confirmar';setTimeout(()=>b.textContent='Nova vila (apaga tudo)',3000)}};
 view.addEventListener('click',e=>{
@@ -2253,6 +2270,8 @@ syncUI();updPanel();
 if(document.fonts&&document.fonts.load){document.fonts.load('20px "Press Start 2P"');document.fonts.load('20px VT323')}
 window.vila={onComment,onRose,onGift,trigger,handleLive,state};
 if(state.soundOn){try{auStart();setTimeout(()=>{if(AU.ctx&&AU.ctx.state!=='running') AU.on=false;syncSoundBtn()},500)}catch(e){}}
+if(LIVE_MODE){setRec(true);$('recHint').style.display='none';try{auStart();state.soundOn=true}catch(e){}}
+serverSync();
 if(window.VILA_SERVER){
  $('inWs').value=(location.protocol==='https:'?'wss://':'ws://')+location.host+'/ws';
  $('srvBox').style.display='block';$('inTTUser').value=window.VILA_SERVER.user||'';
